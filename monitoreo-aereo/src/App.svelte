@@ -213,8 +213,8 @@
 
       {#if activeSection === 'map'}
         <div class="map-container" style="width:100%;height:80vh;position:relative;">
-                            <!-- Puedes usar un iframe de FlightAware o FlightRadar24 para mostrar el mapa real -->
-                            <iframe src="https://www.flightaware.com/live/" width="100%" height="100%" style="border:none;"></iframe>
+                            
+                            <iframe src="https://openflights.org/?lang=es_ES" width="100%" height="100%" style="border:none;"></iframe>
                         </div>
       {/if}
 
