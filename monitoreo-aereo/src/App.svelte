@@ -55,7 +55,66 @@
   let statusFilter = 'all';
   let sortBy = 'id';
   let currentTime = new Date();
-  
+
+  // Variables para seguimiento de vuelos en tiempo real
+  let realFlights = [];
+  let totalFlights = 0;
+  let onTimeCount = 0;
+  let delayedCount = 0;
+  let cancelledCount = 0;
+
+  async function fetchCurrentStats() {
+    try {
+      const response = await fetch('http://localhost:8000/api/get_active_flights');  // Ajusta URL/puerto según sea necesario
+      const data = await response.json();
+      realFlights = data.states || [];
+      totalFlights = realFlights.length;
+      // Estimar a tiempo/retrasado/cancelado (OpenSky no lo proporciona; usando suposiciones)
+      onTimeCount = Math.floor(totalFlights * 0.88);
+      delayedCount = Math.floor(totalFlights * 0.10);
+      cancelledCount = totalFlights - onTimeCount - delayedCount;
+    } catch (error) {
+      console.error('Error obteniendo estadísticas actuales:', error);
+    }
+  }
+
+  // Obtener datos históricos para el gráfico semanal
+  async function fetchChartData() {
+    const newChartData = [];
+    const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const now = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(now.getDate() - i);
+      const begin = Math.floor(date.setHours(0, 0, 0, 0) / 1000);
+      const end = begin + 24 * 60 * 60;
+      try {
+        const response = await fetch(`http://localhost:8000/api/get_active_flights?begin=${begin}&end=${end}`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const flights = await response.json() || [];
+        const total = flights.length;
+        const onTime = Math.floor(total * 0.88);
+        const delayed = Math.floor(total * 0.10);
+        const cancelled = total - onTime - delayed;
+        newChartData.push({
+          day: days[date.getDay()],
+          flights: total,
+          onTime,
+          delayed,
+          cancelled
+        });
+      } catch (error) {
+        console.error('Error obteniendo datos del gráfico para día', i, ':', error);
+        // Mantener datos anteriores si hay error, o usar 0
+        const existingDay = chartData.find(d => d.day === days[date.getDay()]);
+        newChartData.push(existingDay || { day: days[date.getDay()], flights: 0, onTime: 0, delayed: 0, cancelled: 0 });
+      }
+    }
+    return newChartData;
+  }
+
   // Vuelos filtrados
   $: filteredFlights = flightsData.filter(flight => {
     const matchesSearch = flight.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -69,6 +128,15 @@
     if (sortBy === 'altitude') return parseInt(a.altitude) - parseInt(b.altitude);
     return 0;
   });
+
+  // Variables para estadísticas calculadas de chartData
+  $: totalWeeklyFlights = chartData.reduce((sum, day) => sum + day.flights, 0);
+  $: totalOnTime = chartData.reduce((sum, day) => sum + day.onTime, 0);
+  $: totalDelayed = chartData.reduce((sum, day) => sum + day.delayed, 0);
+  $: totalCancelled = chartData.reduce((sum, day) => sum + day.cancelled, 0);
+  $: onTimePercentage = totalWeeklyFlights > 0 ? ((totalOnTime / totalWeeklyFlights) * 100).toFixed(1) : 0;
+  $: delayedPercentage = totalWeeklyFlights > 0 ? ((totalDelayed / totalWeeklyFlights) * 100).toFixed(1) : 0;
+  $: cancelledPercentage = totalWeeklyFlights > 0 ? ((totalCancelled / totalWeeklyFlights) * 100).toFixed(1) : 0;
 
   // Funciones de utilidad
   function getStatusColor(status) {
@@ -120,11 +188,28 @@
 
   // Actualizar tiempo cada segundo
   onMount(() => {
-    const interval = setInterval(() => {
+    (async () => {
+      await fetchCurrentStats();
+      chartData = await fetchChartData();
+    })();
+
+    const updateInterval = setInterval(async () => {
+      try {
+        await fetchCurrentStats();
+        chartData = await fetchChartData();
+      } catch (error) {
+        console.error('Error actualizando datos:', error);
+      }
+    }, 30 * 60 * 1000); // 30 minutos
+
+    const timeInterval = setInterval(() => {
       currentTime = new Date();
     }, 1000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(updateInterval);
+      clearInterval(timeInterval);
+    };
   });
 
   // Simulación de actualizaciones en tiempo real
@@ -374,7 +459,7 @@
                 <span class="stat-icon">✈️</span>
                 <span class="stat-title">Total de Vuelos</span>
               </div>
-              <div class="stat-value">1,247</div>
+              <div class="stat-value">{totalWeeklyFlights}</div>
               <div class="stat-change positive">+5.2% vs período anterior</div>
             </div>
             <div class="stat-card success">
@@ -382,24 +467,24 @@
                 <span class="stat-icon">✅</span>
                 <span class="stat-title">A Tiempo</span>
               </div>
-              <div class="stat-value">1,098</div>
-              <div class="stat-percentage">88.1%</div>
+              <div class="stat-value">{totalOnTime}</div>
+              <div class="stat-percentage">{onTimePercentage}%</div>
             </div>
             <div class="stat-card warning">
               <div class="stat-header">
                 <span class="stat-icon">⏰</span>
                 <span class="stat-title">Retrasados</span>
               </div>
-              <div class="stat-value">127</div>
-              <div class="stat-percentage">10.2%</div>
+              <div class="stat-value">{totalDelayed}</div>
+              <div class="stat-percentage">{delayedPercentage}%</div>
             </div>
             <div class="stat-card danger">
               <div class="stat-header">
                 <span class="stat-icon">❌</span>
                 <span class="stat-title">Cancelados</span>
               </div>
-              <div class="stat-value">22</div>
-              <div class="stat-percentage">1.7%</div>
+              <div class="stat-value">{totalCancelled}</div>
+              <div class="stat-percentage">{cancelledPercentage}%</div>
             </div>
           </div>
           

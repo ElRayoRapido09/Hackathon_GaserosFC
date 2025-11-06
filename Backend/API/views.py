@@ -13,7 +13,6 @@ def get_active_flights(request):
     Endpoint de API: https://opensky-network.org/api/states/all
     Parámetros opcionales: origin_country (ej. ?origin_country=Spain)
     """
-    url = "https://opensky-network.org/api/states/all"
     params = {}
     
     # Agregar filtros desde los parámetros de la URL
@@ -21,25 +20,19 @@ def get_active_flights(request):
     if origin_country:
         params['origin_country'] = origin_country
     
-    # Puedes agregar más filtros aquí, como bounding box
-    # lamin = request.GET.get('lamin')  # Latitud mínima
-    # etc.
-    
-    try:
+    # Verificar consulta histórica (timestamps begin/end)
+    begin = request.GET.get('begin')
+    end = request.GET.get('end')
+    if begin and end:
+        url = f"https://opensky-network.org/api/flights/all?begin={begin}&end={end}"
+        # La API histórica no usa params adicionales
+        response = requests.get(url, timeout=10)
+    else:
+        url = "https://opensky-network.org/api/states/all"
         response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        
-        # Filtrar adicionalmente en Python si es necesario (por ejemplo, por altitud)
-        altitude_min = request.GET.get('altitude_min')
-        if altitude_min:
-            try:
-                alt_min = float(altitude_min)
-                filtered_states = [state for state in data.get('states', []) if state[7] and state[7] > alt_min]
-                data['states'] = filtered_states
-            except ValueError:
-                pass  # Ignorar si no es un número válido
-        
-        return JsonResponse(data)
-    except requests.RequestException as e:
-        return JsonResponse({"error": str(e)}, status=500)
+    
+    response.raise_for_status()
+    data = response.json()
+    
+    # Para históricos, data es una lista de vuelos; para actuales, es {'time': ..., 'states': [...]}
+    return JsonResponse(data)
