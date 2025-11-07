@@ -65,34 +65,32 @@
 
   async function fetchCurrentStats() {
     try {
-      const response = await fetch('http://localhost:8000/api/flights/');  // Corregido para coincidir con la URL de Django
+      const response = await fetch('http://localhost:8000/api/flights/');
       const data = await response.json();
       realFlights = data.states || [];
       totalFlights = realFlights.length;
-      // Estimar a tiempo/retrasado/cancelado (OpenSky no lo proporciona; usando suposiciones)
       onTimeCount = Math.floor(totalFlights * 0.88);
       delayedCount = Math.floor(totalFlights * 0.10);
       cancelledCount = totalFlights - onTimeCount - delayedCount;
+      console.log('fetchCurrentStats:', totalFlights);
     } catch (error) {
       console.error('Error obteniendo estadísticas actuales:', error);
     }
   }
 
-  // Obtener datos históricos para el gráfico semanal (últimos 3 días para reducir requests)
+  // Obtener datos históricos para el gráfico (3 días para reducir requests)
   async function fetchChartData() {
     const newChartData = [];
     const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
     const now = new Date();
-    for (let i = 2; i >= 0; i--) {  // Cambiado a 3 días
+    for (let i = 2; i >= 0; i--) {
       const date = new Date(now);
       date.setDate(now.getDate() - i);
       const begin = Math.floor(date.setHours(0, 0, 0, 0) / 1000);
       const end = begin + 24 * 60 * 60;
       try {
         const response = await fetch(`http://localhost:8000/api/flights/?begin=${begin}&end=${end}`);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const flights = await response.json() || [];
         const total = flights.length;
         const onTime = Math.floor(total * 0.88);
@@ -137,7 +135,7 @@
   $: delayedPercentage = totalWeeklyFlights > 0 ? ((totalDelayed / totalWeeklyFlights) * 100).toFixed(1) : 0;
   $: cancelledPercentage = totalWeeklyFlights > 0 ? ((totalCancelled / totalWeeklyFlights) * 100).toFixed(1) : 0;
 
-  // Funciones de utilidad
+  // Utilidades
   function getStatusColor(status) {
     switch(status) {
       case 'En vuelo': return '#22c55e';
@@ -185,35 +183,29 @@
     period = newPeriod;
   }
 
-  // Actualizar tiempo cada segundo
+  // Consolidated onMount: initial fetch, periodic fetch, and simulated updates
   onMount(() => {
+    let updateInterval;
+    let simulationInterval;
+    let timeInterval;
+
     (async () => {
       await fetchCurrentStats();
       chartData = await fetchChartData();
     })();
 
-    const updateInterval = setInterval(async () => {
+    // Update every 60 minutes (adjust as needed)
+    updateInterval = setInterval(async () => {
       try {
         await fetchCurrentStats();
         chartData = await fetchChartData();
       } catch (error) {
         console.error('Error actualizando datos:', error);
       }
-    }, 60 * 60 * 1000); // 60 minutos
+    }, 60 * 60 * 1000);
 
-    const timeInterval = setInterval(() => {
-      currentTime = new Date();
-    }, 1000);
-
-    return () => {
-      clearInterval(updateInterval);
-      clearInterval(timeInterval);
-    };
-  });
-
-  // Simulación de actualizaciones en tiempo real
-  onMount(() => {
-    const updateInterval = setInterval(() => {
+    // Simulación de actualizaciones en tiempo real (UI demo)
+    simulationInterval = setInterval(() => {
       if (Math.random() > 0.7) {
         const randomFlight = flightsData[Math.floor(Math.random() * flightsData.length)];
         const altitudes = ['25,000 ft', '30,000 ft', '35,000 ft', '40,000 ft'];
@@ -222,7 +214,16 @@
       }
     }, 5000);
 
-    return () => clearInterval(updateInterval);
+    // Actualizar reloj UI
+    timeInterval = setInterval(() => {
+      currentTime = new Date();
+    }, 1000);
+
+    return () => {
+      clearInterval(updateInterval);
+      clearInterval(simulationInterval);
+      clearInterval(timeInterval);
+    };
   });
 </script>
 
@@ -258,23 +259,23 @@
       <nav class="nav-menu">
         
         <button class="nav-item" class:active={activeSection === 'flights'} on:click={() => showSection('flights')}>
-          <span class="nav-icon">✈️</span>
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plane-tilt"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M14.5 6.5l3 -2.9a2.05 2.05 0 0 1 2.9 2.9l-2.9 3l2.5 7.5l-2.5 2.55l-3.5 -6.55l-3 3v3l-2 2l-1.5 -4.5l-4.5 -1.5l2 -2h3l3 -3l-6.5 -3.5l2.5 -2.5l7.5 2.5z" /></svg>
           <span class="nav-label">Vuelos Activos</span>
         </button>
         <button class="nav-item" class:active={activeSection === 'traffic'} on:click={() => showSection('traffic')}>
-          <span class="nav-icon">🛫</span>
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plane-departure"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M14.639 10.258l4.83 -1.294a2 2 0 1 1 1.035 3.863l-14.489 3.883l-4.45 -5.02l2.897 -.776l2.45 1.414l2.897 -.776l-3.743 -6.244l2.898 -.777l5.675 5.727z" /><path d="M3 21h18" /></svg>
           <span class="nav-label">Tráfico Aéreo</span>
         </button>
         <button class="nav-item" class:active={activeSection === 'stats'} on:click={() => showSection('stats')}>
-          <span class="nav-icon">📊</span>
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-chart-bar-popular"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 13a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z" /><path d="M9 9a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z" /><path d="M15 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z" /><path d="M4 20h14" /></svg>
           <span class="nav-label">Estadísticas</span>
         </button>
         <button class="nav-item" class:active={activeSection === 'system'} on:click={() => showSection('system')}>
-          <span class="nav-icon">⚙️</span>
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-settings"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z" /><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /></svg>
           <span class="nav-label">Estado Sistema</span>
         </button>
         <button class="nav-item" class:active={activeSection === 'map'} on:click={() => showSection('map')}>
-          <span class="nav-icon">🗺️</span>
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-photo-pin"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M15 8h.01" /><path d="M12.5 21h-6.5a3 3 0 0 1 -3 -3v-12a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v5.5" /><path d="M3 16l5 -5c.928 -.893 2.072 -.893 3 0l2.5 2.5" /><path d="M21.121 20.121a3 3 0 1 0 -4.242 0c.418 .419 1.125 1.045 2.121 1.879c1.051 -.89 1.759 -1.516 2.121 -1.879z" /><path d="M19 18v.01" /></svg>
           <span class="nav-label">Mapa Global</span>
         </button>
       </nav>
@@ -294,15 +295,13 @@
 
     <!-- Main Content -->
     <main class="content">
-
       {#if activeSection === 'map'}
         <div class="map-container" style="width:100%;height:80vh;position:relative;">
-                            
-                            <iframe src="https://openflights.org/?lang=es_ES" width="100%" height="100%" style="border:none;"></iframe>
-                        </div>
+          <iframe src="https://openflights.org/?lang=es_ES" width="100%" height="100%" style="border:none;"></iframe>
+        </div>
       {/if}
 
-  <!-- Vuelos Activos Section -->
+      <!-- Vuelos Activos Section -->
       {#if activeSection === 'flights'}
         <div class="section active">
           <div class="section-header">
@@ -379,28 +378,52 @@
           
           <div class="overview-cards">
             <div class="stat-card primary">
-              <div class="stat-icon">🛩️</div>
+              <div class="stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plane-tilt">
+                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                  <path d="M14.5 6.5l3 -2.9a2.05 2.05 0 0 1 2.9 2.9l-2.9 3l2.5 7.5l-2.5 2.55l-3.5 -6.55l-3 3v3l-2 2l-1.5 -4.5l-4.5 -1.5l2 -2h3l3 -3l-6.5 -3.5l2.5 -2.5l7.5 2.5z" />
+                </svg>
+              </div>
               <div class="stat-content">
                 <div class="stat-value">284</div>
                 <div class="stat-label">Vuelos Totales</div>
               </div>
             </div>
             <div class="stat-card">
-              <div class="stat-icon">🛫</div>
+              <div class="stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plane-departure">
+                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                  <path d="M14.639 10.258l4.83 -1.294a2 2 0 1 1 1.035 3.863l-14.489 3.883l-4.45 -5.02l2.897 -.776l2.45 1.414l2.897 -.776l-3.743 -6.244l2.898 -.777l5.675 5.727z" />
+                  <path d="M3 21h18" />
+                </svg>
+              </div>
               <div class="stat-content">
                 <div class="stat-value">142</div>
                 <div class="stat-label">Salidas</div>
               </div>
             </div>
             <div class="stat-card">
-              <div class="stat-icon">🛬</div>
+              <div class="stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plane-inflight">
+                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                  <path d="M15 11.085h5a2 2 0 1 1 0 4h-15l-3 -6h3l2 2h3l-2 -7h3l4 7z" />
+                  <path d="M3 21h18" />
+                </svg>
+              </div>
               <div class="stat-content">
                 <div class="stat-value">142</div>
                 <div class="stat-label">Llegadas</div>
               </div>
             </div>
             <div class="stat-card warning">
-              <div class="stat-icon">⚠️</div>
+              <div class="stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-alert-triangle">
+                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                  <path d="M12 9v4" />
+                  <path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z" />
+                  <path d="M12 16h.01" />
+                </svg>
+              </div>
               <div class="stat-content">
                 <div class="stat-value">23</div>
                 <div class="stat-label">Retrasos</div>
@@ -465,8 +488,7 @@
             </div>
             <div class="stat-card warning">
               <div class="stat-header">
-                <span class="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" class="icon icon-tabler icons-tabler-filled icon-tabler-alert-circle"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 2c5.523 0 10 4.477 10 10a10 10 0 0 1 -19.995 .324l-.005 -.324l.004 -.28c.148 -5.393 4.566 -9.72 9.996 -9.72zm.01 13l-.127 .007a1 1 0 0 0 0 1.986l.117 .007l.127 -.007a1 1 0 0 0 0 -1.986l-.117 -.007zm-.01 -8a1 1 0 0 0 -.993 .883l-.007 .117v4l.007 .117a1 1 0 0 0 1.986 0l.007 -.117v-4l-.007 -.117a1 1 0 0 0 -.993 -.883z" /></svg></span>
-                <span class="stat-title">Retrasados</span>
+                <span class="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-clock"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" /><path d="M12 7v5l3 3" /></svg>
               </div>
               <div class="stat-value">{totalDelayed}</div>
               <div class="stat-percentage">{delayedPercentage}%</div>
