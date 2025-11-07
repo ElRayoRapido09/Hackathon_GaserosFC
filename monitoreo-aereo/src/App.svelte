@@ -25,6 +25,10 @@
 
   // Declarar filteredFlights primero para evitar errores de referencia
   let filteredFlights = [];
+  
+  // Variables para paginación
+  let currentPage = 1;
+  let flightsPerPage = 100;
 
   // Nueva función: Obtener vuelos activos de DB (último snapshot)
   async function fetchFlightsFromDB() {
@@ -133,6 +137,46 @@
     // Agrega más lógica si necesitas
     return 0;
   });
+
+  // Cálculos de paginación
+  $: totalPages = Math.ceil(filteredFlights.length / flightsPerPage);
+  $: paginatedFlights = filteredFlights.slice(
+    (currentPage - 1) * flightsPerPage,
+    currentPage * flightsPerPage
+  );
+  $: startIndex = (currentPage - 1) * flightsPerPage + 1;
+  $: endIndex = Math.min(currentPage * flightsPerPage, filteredFlights.length);
+
+  // Funciones de navegación
+  function goToPage(page) {
+    if (page >= 1 && page <= totalPages) {
+      currentPage = page;
+      // Scroll to top cuando cambias de página
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
+
+  function nextPage() {
+    if (currentPage < totalPages) {
+      currentPage++;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
+
+  function prevPage() {
+    if (currentPage > 1) {
+      currentPage--;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
+
+  // Resetear página cuando cambian los filtros
+  $: {
+    searchTerm;
+    statusFilter;
+    sortBy;
+    currentPage = 1;
+  }
 
   // Agregar definiciones de variables reactivas para métricas
   $: averageVelocity = totalFlights > 0 ? (realFlights.reduce((sum, f) => sum + ((f.velocity || 0) * 3.6), 0) / totalFlights).toFixed(0) : 0;  // Convertir m/s a km/h
@@ -388,9 +432,14 @@
               <option value="altitude">Ordenar por Altitud</option>
             </select>
           </div>
+
+          <!-- Información de paginación -->
+          <div class="pagination-info">
+            <span>Mostrando {startIndex} - {endIndex} de {filteredFlights.length} vuelos</span>
+          </div>
           
           <div class="flights-grid">
-            {#each filteredFlights as flight}
+            {#each paginatedFlights as flight}
               <div class="flight-card">
                 <div class="flight-header">
                   <h3 class="flight-id">{flight.callsign || 'N/A'}</h3>
@@ -418,6 +467,39 @@
                 </div>
               </div>
             {/each}
+          </div>
+
+          <!-- Controles de paginación -->
+          <div class="pagination-controls">
+            <button class="pagination-btn" on:click={prevPage} disabled={currentPage === 1}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M15 18l-6-6 6-6"/>
+              </svg>
+              Anterior
+            </button>
+            
+            <div class="pagination-pages">
+              {#each Array(totalPages) as _, i}
+                {#if i + 1 === 1 || i + 1 === totalPages || (i + 1 >= currentPage - 2 && i + 1 <= currentPage + 2)}
+                  <button 
+                    class="page-btn" 
+                    class:active={currentPage === i + 1}
+                    on:click={() => goToPage(i + 1)}
+                  >
+                    {i + 1}
+                  </button>
+                {:else if i + 1 === currentPage - 3 || i + 1 === currentPage + 3}
+                  <span class="pagination-dots">...</span>
+                {/if}
+              {/each}
+            </div>
+            
+            <button class="pagination-btn" on:click={nextPage} disabled={currentPage === totalPages}>
+              Siguiente
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 18l6-6-6-6"/>
+              </svg>
+            </button>
           </div>
         </div>
       {/if}
@@ -753,5 +835,83 @@
     .main-container {
       flex-direction: column;
     }
+  }
+
+  /* Estilos de paginación */
+  .pagination-info {
+    padding: 1rem 0;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.9rem;
+  }
+
+  .pagination-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    padding: 2rem 0;
+    margin-top: 2rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .pagination-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: white;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .pagination-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  }
+
+  .pagination-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .pagination-pages {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .page-btn {
+    min-width: 40px;
+    height: 40px;
+    padding: 0.5rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: white;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .page-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+  }
+
+  .page-btn.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: #667eea;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  }
+
+  .pagination-dots {
+    color: rgba(255, 255, 255, 0.6);
+    padding: 0 0.5rem;
   }
 </style>
