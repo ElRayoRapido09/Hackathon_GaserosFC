@@ -25,12 +25,14 @@ def get_opensky_token():
 
 @require_GET
 @csrf_exempt  # Eliminar en producción; usar manejo adecuado de CSRF
-@cache_page(600)  # Cachear por 10 minutos para reducir requests
 def get_active_flights(request):
     """
     Obtener vuelos activos de la API de OpenSky, con filtros opcionales.
+    Automáticamente guarda los datos en la base de datos.
     Endpoint de API: https://opensky-network.org/api/states/all
-    Parámetros opcionales: origin_country (ej. ?origin_country=Spain)
+    Parámetros opcionales: 
+        - origin_country (ej. ?origin_country=Spain)
+        - save_to_db (ej. ?save_to_db=false para no guardar, por defecto guarda)
     """
     params = {}
     
@@ -38,6 +40,9 @@ def get_active_flights(request):
     origin_country = request.GET.get('origin_country')
     if origin_country:
         params['origin_country'] = origin_country
+    
+    # Parámetro para decidir si guardar en DB (por defecto True)
+    save_to_db = request.GET.get('save_to_db', 'true').lower() != 'false'
     
     # Obtener token OAuth2
     try:
@@ -63,6 +68,29 @@ def get_active_flights(request):
         
         response.raise_for_status()
         data = response.json()
+        
+        # Guardar automáticamente en la base de datos si no es consulta histórica
+        snapshot_info = None
+        if save_to_db and not (begin and end):
+            try:
+                time = data.get('time', 0)
+                states = data.get('states', [])
+                
+                if time and states:
+                    snapshot = save_flight_data_to_db(time, states)
+                    snapshot_info = {
+                        'snapshot_id': snapshot.id,
+                        'total_saved': snapshot.total_states,
+                        'saved_at': snapshot.created_at.isoformat()
+                    }
+            except Exception as e:
+                print(f"Error guardando en base de datos: {e}")
+                # Continuamos devolviendo los datos aunque falle el guardado
+        
+        # Agregar información del guardado a la respuesta
+        if snapshot_info:
+            data['db_snapshot'] = snapshot_info
+            
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 429:
             # Rate limit exceeded, return a message
