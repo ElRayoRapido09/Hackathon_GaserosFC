@@ -68,9 +68,27 @@
 
   async function fetchCurrentStats() {
     try {
-      const response = await fetch('http://localhost:8000/api/flights/');
+      const response = await fetch('https://opensky-network.org/api/states/all');
       const data = await response.json();
-      realFlights = data.states || [];
+      // Convertir array de arrays a array de objetos
+      realFlights = data.states.map(state => ({
+        icao24: state[0],
+        callsign: state[1],
+        origin_country: state[2],
+        time_position: state[3],
+        last_contact: state[4],
+        longitude: state[5],
+        latitude: state[6],
+        baro_altitude: state[7],
+        on_ground: state[8],
+        velocity: state[9],  // m/s
+        true_track: state[10],
+        vertical_rate: state[11],  // m/s
+        geo_altitude: state[12],  // metros
+        squawk: state[13],
+        spi: state[14],
+        position_source: state[15]
+      })) || [];
       totalFlights = realFlights.length;
       onTimeCount = Math.floor(totalFlights * 0.88);
       delayedCount = Math.floor(totalFlights * 0.10);
@@ -84,16 +102,30 @@
   // Modificar fetchChartData para obtener datos actuales en lugar de históricos
   async function fetchChartData() {
     try {
-      const response = await fetch('http://localhost:8000/api/flights/');
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const response = await fetch('https://opensky-network.org/api/states/all');
       const data = await response.json();
-      const flights = data.states || [];
+      const flights = data.states.map(state => ({
+        icao24: state[0],
+        callsign: state[1],
+        origin_country: state[2],
+        time_position: state[3],
+        last_contact: state[4],
+        longitude: state[5],
+        latitude: state[6],
+        baro_altitude: state[7],
+        on_ground: state[8],
+        velocity: state[9],  // m/s
+        true_track: state[10],
+        vertical_rate: state[11],  // m/s
+        geo_altitude: state[12],  // metros
+        squawk: state[13],
+        spi: state[14],
+        position_source: state[15]
+      })) || [];
       const total = flights.length;
-      const onTime = Math.floor(total * 0.88);  // Estimación
+      const onTime = Math.floor(total * 0.88);
       const delayed = Math.floor(total * 0.10);
       const cancelled = total - onTime - delayed;
-      
-      // Crear un "gráfico" simple con datos actuales (puedes expandirlo para múltiples puntos)
       return [{
         day: 'Actual',
         flights: total,
@@ -132,7 +164,6 @@
 
   // Agregar definiciones de variables reactivas para métricas
   $: averageVelocity = totalFlights > 0 ? (realFlights.reduce((sum, f) => sum + ((f.velocity || 0) * 3.6), 0) / totalFlights).toFixed(0) : 0;  // Convertir m/s a km/h
-  $: averageAltitude = totalFlights > 0 ? (realFlights.reduce((sum, f) => sum + (f.geo_altitude || 0), 0) / totalFlights).toFixed(0) : 0;  // Ya en metros
 
   // Agregar definiciones de variables reactivas para métricas adicionales
   $: ascendingFlights = realFlights.filter(f => f.vertical_rate > 0).length;
@@ -594,20 +625,6 @@
                       <svg viewBox="0 0 100 60" class="gauge-svg">
                         <path d="M10,50 A40,40 0 0,1 90,50" fill="none" stroke="#e5e7eb" stroke-width="8"/>
                         <path d="M10,50 A40,40 0 0,1 {10 + 80 * (averageVelocity / 1000)} ,{50 - 40 * Math.sin(Math.PI * (averageVelocity / 1000))}" fill="none" stroke="#22c55e" stroke-width="8"/>
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-                <div class="metric-item">
-                  <div class="metric-card">
-                    <div class="metric-header">
-                      <span class="metric-label">Altitud Promedio</span>
-                      <span class="metric-value">{averageAltitude} m</span>
-                    </div>
-                    <div class="gauge-chart">
-                      <svg viewBox="0 0 100 60" class="gauge-svg">
-                        <path d="M10,50 A40,40 0 0,1 90,50" fill="none" stroke="#e5e7eb" stroke-width="8"/>
-                        <path d="M10,50 A40,40 0 0,1 {10 + 80 * (averageAltitude / 12000)} ,{50 - 40 * Math.sin(Math.PI * (averageAltitude / 12000))}" fill="none" stroke="#f59e0b" stroke-width="8"/>
                       </svg>
                     </div>
                   </div>
