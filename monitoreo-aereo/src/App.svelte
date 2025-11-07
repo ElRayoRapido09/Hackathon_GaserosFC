@@ -65,7 +65,7 @@
 
   async function fetchCurrentStats() {
     try {
-      const response = await fetch('http://localhost:8000/api/get_active_flights');  // Ajusta URL/puerto según sea necesario
+      const response = await fetch('http://localhost:8000/api/flights/');  // Corregido para coincidir con la URL de Django
       const data = await response.json();
       realFlights = data.states || [];
       totalFlights = realFlights.length;
@@ -78,18 +78,18 @@
     }
   }
 
-  // Obtener datos históricos para el gráfico semanal
+  // Obtener datos históricos para el gráfico semanal (últimos 3 días para reducir requests)
   async function fetchChartData() {
     const newChartData = [];
     const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
     const now = new Date();
-    for (let i = 6; i >= 0; i--) {
+    for (let i = 2; i >= 0; i--) {  // Cambiado a 3 días
       const date = new Date(now);
       date.setDate(now.getDate() - i);
       const begin = Math.floor(date.setHours(0, 0, 0, 0) / 1000);
       const end = begin + 24 * 60 * 60;
       try {
-        const response = await fetch(`http://localhost:8000/api/get_active_flights?begin=${begin}&end=${end}`);
+        const response = await fetch(`http://localhost:8000/api/flights/?begin=${begin}&end=${end}`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -107,7 +107,6 @@
         });
       } catch (error) {
         console.error('Error obteniendo datos del gráfico para día', i, ':', error);
-        // Mantener datos anteriores si hay error, o usar 0
         const existingDay = chartData.find(d => d.day === days[date.getDay()]);
         newChartData.push(existingDay || { day: days[date.getDay()], flights: 0, onTime: 0, delayed: 0, cancelled: 0 });
       }
@@ -200,7 +199,7 @@
       } catch (error) {
         console.error('Error actualizando datos:', error);
       }
-    }, 30 * 60 * 1000); // 30 minutos
+    }, 60 * 60 * 1000); // 60 minutos
 
     const timeInterval = setInterval(() => {
       currentTime = new Date();
@@ -450,7 +449,7 @@
           <div class="overview-stats">
             <div class="stat-card primary">
               <div class="stat-header">
-                <span class="stat-icon">✈️</span>
+                <span class="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plane-tilt"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M14.5 6.5l3 -2.9a2.05 2.05 0 0 1 2.9 2.9l-2.9 3l2.5 7.5l-2.5 2.55l-3.5 -6.55l-3 3v3l-2 2l-1.5 -4.5l-4.5 -1.5l2 -2h3l3 -3l-6.5 -3.5l2.5 -2.5l7.5 2.5z" /></svg></span>
                 <span class="stat-title">Total de Vuelos</span>
               </div>
               <div class="stat-value">{totalWeeklyFlights}</div>
@@ -458,7 +457,7 @@
             </div>
             <div class="stat-card success">
               <div class="stat-header">
-                <span class="stat-icon">✅</span>
+                <span class="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-check"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg></span>
                 <span class="stat-title">A Tiempo</span>
               </div>
               <div class="stat-value">{totalOnTime}</div>
@@ -466,7 +465,7 @@
             </div>
             <div class="stat-card warning">
               <div class="stat-header">
-                <span class="stat-icon">⏰</span>
+                <span class="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" class="icon icon-tabler icons-tabler-filled icon-tabler-alert-circle"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 2c5.523 0 10 4.477 10 10a10 10 0 0 1 -19.995 .324l-.005 -.324l.004 -.28c.148 -5.393 4.566 -9.72 9.996 -9.72zm.01 13l-.127 .007a1 1 0 0 0 0 1.986l.117 .007l.127 -.007a1 1 0 0 0 0 -1.986l-.117 -.007zm-.01 -8a1 1 0 0 0 -.993 .883l-.007 .117v4l.007 .117a1 1 0 0 0 1.986 0l.007 -.117v-4l-.007 -.117a1 1 0 0 0 -.993 -.883z" /></svg></span>
                 <span class="stat-title">Retrasados</span>
               </div>
               <div class="stat-value">{totalDelayed}</div>
@@ -474,7 +473,7 @@
             </div>
             <div class="stat-card danger">
               <div class="stat-header">
-                <span class="stat-icon">❌</span>
+                <span class="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-x"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 6l-12 12" /><path d="M6 6l12 12" /></svg></span>
                 <span class="stat-title">Cancelados</span>
               </div>
               <div class="stat-value">{totalCancelled}</div>
