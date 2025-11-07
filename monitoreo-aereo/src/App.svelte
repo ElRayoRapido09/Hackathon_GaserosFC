@@ -446,13 +446,7 @@
         <div class="section active">
           <div class="section-header">
             <h2 class="section-title">Estadísticas de Vuelo</h2>
-            <div class="period-tabs">
-              <button class="tab" class:active={period === 'daily'} on:click={() => setPeriod('daily')}>Diario</button>
-              <button class="tab" class:active={period === 'weekly'} on:click={() => setPeriod('weekly')}>Semanal</button>
-              <button class="tab" class:active={period === 'monthly'} on:click={() => setPeriod('monthly')}>Mensual</button>
-            </div>
           </div>
-          
           <div class="overview-stats">
             <div class="stat-card primary">
               <div class="stat-header">
