@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'corsheaders',  # Agregado para CORS
+    'API.apps.ApiConfig',  # Agregado para la aplicación de vuelos
 ]
 
 MIDDLEWARE = [
@@ -136,8 +137,6 @@ CACHES = {
 }
 
 # Credenciales OpenSky desde variables de entorno
-OPENSKY_USERNAME = config('OPENSKY_USERNAME')
-OPENSKY_PASSWORD = config('OPENSKY_PASSWORD')
 
 # Configuración CORS para permitir requests desde el frontend
 CORS_ALLOWED_ORIGINS = [
