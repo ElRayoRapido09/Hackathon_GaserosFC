@@ -1,0 +1,80 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.env
+.env.* 
+.Python
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+media/
+staticfiles/
+# no ignore for migrations (track them)
+
+# Docker
+docker-compose.override.yml
+docker-compose.*.yml
+.env.docker
+
+# IDEs and editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Node (if frontend)
+node_modules/
+npm-debug.log
+yarn-error.log
+/dist
+/build
+
+# Test / coverage
+.coverage
+htmlcov/
+.coverage.*
+.pytest_cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# PyInstaller
+*.manifest
+*.spec
+
+# compiled extensions
+*.so
+
+# logs and runtime
+logs/
+*.pid
+*.sock
+
+# Python tool caches
+.mypy_cache/
+.pyre/
+__pypackages__/
+
+# Secrets and credentials
+credentials/
+*.pem
+*.key
+*.crt
+
+# Other
+*.env.local
+*.sqlite3
