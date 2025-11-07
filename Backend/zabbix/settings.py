@@ -77,8 +77,12 @@ WSGI_APPLICATION = 'zabbix.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'hackathon',
+        'USER': 'root',
+        'PASSWORD': '12345',
+        'HOST': 'host.docker.internal', # O la IP de tu servidor de base de datos
+        'PORT': '3306',      # Puerto por defecto de MySQL
     }
 }
 
