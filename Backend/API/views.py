@@ -13,8 +13,8 @@ def get_opensky_token():
     url = "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token"
     data = {
         'grant_type': 'client_credentials',
-        'client_id': settings.OPENSKY_USERNAME,  # Asumiendo que es client_id
-        'client_secret': settings.OPENSKY_PASSWORD  # Asumiendo que es client_secret
+        'client_id': 'gaserosfc-api-client',  # Asumiendo que es client_id
+        'client_secret': 'GPsfDsxv8i8MAj9PPN1OEUERM9HhzdCU'  # Asumiendo que es client_secret
     }
     response = requests.post(url, data=data, timeout=10)
     response.raise_for_status()
