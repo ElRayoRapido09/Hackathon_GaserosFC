@@ -1,53 +1,12 @@
 <script>
   import { onMount } from 'svelte';
   
-  // Datos de ejemplo
-  let flightsData = [
-    { id: 'AA123', airline: 'American Airlines', route: 'NYC → LAX', status: 'En vuelo', altitude: '35,000 ft', speed: '520 mph', eta: '14:30' },
-    { id: 'UA456', airline: 'United Airlines', route: 'LAX → CHI', status: 'Despegando', altitude: '5,000 ft', speed: '180 mph', eta: '16:45' },
-    { id: 'DL789', airline: 'Delta Airlines', route: 'MIA → ATL', status: 'Aproximación', altitude: '8,000 ft', speed: '250 mph', eta: '13:15' },
-    { id: 'SW101', airline: 'Southwest Airlines', route: 'DAL → HOU', status: 'En vuelo', altitude: '28,000 ft', speed: '480 mph', eta: '15:20' },
-    { id: 'BA202', airline: 'British Airways', route: 'LHR → JFK', status: 'En vuelo', altitude: '41,000 ft', speed: '580 mph', eta: '18:00' },
-    { id: 'AF303', airline: 'Air France', route: 'CDG → LAX', status: 'En vuelo', altitude: '39,000 ft', speed: '560 mph', eta: '19:30' },
-    { id: 'LH404', airline: 'Lufthansa', route: 'FRA → JFK', status: 'Despegando', altitude: '12,000 ft', speed: '320 mph', eta: '17:45' },
-    { id: 'KL505', airline: 'KLM', route: 'AMS → SFO', status: 'En vuelo', altitude: '37,000 ft', speed: '540 mph', eta: '20:15' }
-  ];
-
-  let airportsData = [
-    { airport: 'JFK', departures: 45, arrivals: 52, delays: 8, efficiency: 89 },
-    { airport: 'LAX', departures: 38, arrivals: 41, delays: 3, efficiency: 95 },
-    { airport: 'CHI', departures: 29, arrivals: 33, delays: 7, efficiency: 82 },
-    { airport: 'MIA', departures: 22, arrivals: 19, delays: 2, efficiency: 93 },
-    { airport: 'ATL', departures: 35, arrivals: 28, delays: 5, efficiency: 87 },
-    { airport: 'SFO', departures: 31, arrivals: 34, delays: 4, efficiency: 90 }
-  ];
-
-  let servicesData = [
-    { name: 'Radar Principal', status: 'operational', uptime: 99.9, responseTime: 45 },
-    { name: 'Sistema de Comunicación', status: 'operational', uptime: 99.8, responseTime: 32 },
-    { name: 'Base de Datos', status: 'warning', uptime: 98.5, responseTime: 120 },
-    { name: 'Torre de Control', status: 'operational', uptime: 100, responseTime: 12 },
-    { name: 'Sistema Meteorológico', status: 'operational', uptime: 99.6, responseTime: 67 },
-    { name: 'Backup Systems', status: 'maintenance', uptime: 95.2, responseTime: 0 }
-  ];
-
-  let alertsData = [
-    { id: 1, type: 'warning', message: 'Base de datos experimentando latencia elevada', time: '10:30', severity: 'medium' },
-    { id: 2, type: 'info', message: 'Mantenimiento programado para sistemas de backup', time: '09:15', severity: 'low' },
-    { id: 3, type: 'success', message: 'Radar principal funcionando correctamente', time: '08:45', severity: 'info' },
-    { id: 4, type: 'error', message: 'Fallo temporal en comunicaciones sector 3', time: '11:20', severity: 'high' }
-  ];
-
-  let chartData = [
-    { day: 'Lun', flights: 187, onTime: 165, delayed: 18, cancelled: 4 },
-    { day: 'Mar', flights: 203, onTime: 178, delayed: 21, cancelled: 4 },
-    { day: 'Mié', flights: 195, onTime: 172, delayed: 19, cancelled: 4 },
-    { day: 'Jue', flights: 218, onTime: 191, delayed: 23, cancelled: 4 },
-    { day: 'Vie', flights: 234, onTime: 205, delayed: 25, cancelled: 4 },
-    { day: 'Sáb', flights: 156, onTime: 138, delayed: 15, cancelled: 3 },
-    { day: 'Dom', flights: 142, onTime: 126, delayed: 13, cancelled: 3 }
-  ];
-
+  // Variables para datos de DB
+  let dbFlights = [];  // Estados de vuelos del último snapshot
+  let dbSnapshots = [];  // Lista de snapshots
+  let lastSnapshot = null;  // Último snapshot para estadísticas
+  let airportsData = [];  // Calcular dinámicamente de DB
+  
   // Variables reactivas
   let activeSection = 'flights';
   let period = 'daily';
@@ -55,6 +14,7 @@
   let statusFilter = 'all';
   let sortBy = 'id';
   let currentTime = new Date();
+  let chartData = [];  // Declarar chartData para evitar error de referencia
 
   // Variables para seguimiento de vuelos en tiempo real
   let realFlights = [];
@@ -66,76 +26,85 @@
   // Declarar filteredFlights primero para evitar errores de referencia
   let filteredFlights = [];
 
-  async function fetchCurrentStats() {
+  // Nueva función: Obtener vuelos activos de DB (último snapshot)
+  async function fetchFlightsFromDB() {
     try {
-      const response = await fetch('https://opensky-network.org/api/states/all');
+      const response = await fetch('http://localhost:8000/api/snapshots/?limit=1');  // Obtener el último snapshot
+      if (!response.ok) throw new Error('Error al obtener snapshots');
       const data = await response.json();
-      // Convertir array de arrays a array de objetos
-      realFlights = data.states.map(state => ({
-        icao24: state[0],
-        callsign: state[1],
-        origin_country: state[2],
-        time_position: state[3],
-        last_contact: state[4],
-        longitude: state[5],
-        latitude: state[6],
-        baro_altitude: state[7],
-        on_ground: state[8],
-        velocity: state[9],  // m/s
-        true_track: state[10],
-        vertical_rate: state[11],  // m/s
-        geo_altitude: state[12],  // metros
-        squawk: state[13],
-        spi: state[14],
-        position_source: state[15]
-      })) || [];
-      totalFlights = realFlights.length;
-      onTimeCount = Math.floor(totalFlights * 0.88);
-      delayedCount = Math.floor(totalFlights * 0.10);
-      cancelledCount = totalFlights - onTimeCount - delayedCount;
-      console.log('fetchCurrentStats:', totalFlights);
+      if (data.snapshots && data.snapshots.length > 0) {
+        lastSnapshot = data.snapshots[0];
+        dbFlights = lastSnapshot.states || [];  // Estados de vuelos del snapshot
+        // Calcular airportsData dinámicamente de los países de origen
+        const countryCounts = {};
+        dbFlights.forEach(flight => {
+          const country = flight.origin_country || 'Desconocido';
+          if (!countryCounts[country]) {
+            countryCounts[country] = { departures: 0, arrivals: 0, delays: 0, efficiency: 90 };  // Eficiencia simulada
+          }
+          countryCounts[country].departures += 1;  // Simular salidas
+          countryCounts[country].arrivals += 1;    // Simular llegadas
+          countryCounts[country].delays += Math.random() > 0.8 ? 1 : 0;  // Simular retrasos aleatorios
+        });
+        airportsData = Object.keys(countryCounts).map(country => ({
+          airport: country,  // Usar país como "aeropuerto"
+          departures: countryCounts[country].departures,
+          arrivals: countryCounts[country].arrivals,
+          delays: countryCounts[country].delays,
+          efficiency: countryCounts[country].efficiency
+        }));
+      } else {
+        dbFlights = [];
+        airportsData = [];
+      }
     } catch (error) {
-      console.error('Error obteniendo estadísticas actuales:', error);
+      console.error('Error obteniendo vuelos de DB:', error);
+      dbFlights = [];
+      airportsData = [];
     }
   }
-
-  // Modificar fetchChartData para obtener datos actuales en lugar de históricos
-  async function fetchChartData() {
+  
+  // Nueva función: Obtener estadísticas de DB (basadas en último snapshot)
+  async function fetchStatsFromDB() {
     try {
-      const response = await fetch('https://opensky-network.org/api/states/all');
+      const response = await fetch('http://localhost:8000/api/snapshots/?limit=1');
+      if (!response.ok) throw new Error('Error al obtener estadísticas');
       const data = await response.json();
-      const flights = data.states.map(state => ({
-        icao24: state[0],
-        callsign: state[1],
-        origin_country: state[2],
-        time_position: state[3],
-        last_contact: state[4],
-        longitude: state[5],
-        latitude: state[6],
-        baro_altitude: state[7],
-        on_ground: state[8],
-        velocity: state[9],  // m/s
-        true_track: state[10],
-        vertical_rate: state[11],  // m/s
-        geo_altitude: state[12],  // metros
-        squawk: state[13],
-        spi: state[14],
-        position_source: state[15]
-      })) || [];
-      const total = flights.length;
-      const onTime = Math.floor(total * 0.88);
-      const delayed = Math.floor(total * 0.10);
-      const cancelled = total - onTime - delayed;
-      return [{
-        day: 'Actual',
-        flights: total,
-        onTime,
-        delayed,
-        cancelled
-      }];
+      if (data.snapshots && data.snapshots.length > 0) {
+        const snapshot = data.snapshots[0];
+        const states = snapshot.states || [];
+        totalFlights = states.length;
+        onTimeCount = Math.floor(totalFlights * 0.88);  // Simulación de "a tiempo"
+        delayedCount = Math.floor(totalFlights * 0.10);
+        cancelledCount = totalFlights - onTimeCount - delayedCount;
+        realFlights = states.map(state => ({
+          icao24: state.icao24,
+          callsign: state.callsign,
+          origin_country: state.origin_country,
+          velocity: state.velocity,
+          vertical_rate: state.vertical_rate,
+          geo_altitude: state.geo_altitude,
+          // Agrega otros campos si los necesitas
+        }));
+      } else {
+        totalFlights = 0;
+        realFlights = [];
+      }
     } catch (error) {
-      console.error('Error obteniendo datos actuales:', error);
-      return [{ day: 'Actual', flights: 0, onTime: 0, delayed: 0, cancelled: 0 }];
+      console.error('Error obteniendo estadísticas de DB:', error);
+      totalFlights = 0;
+      realFlights = [];
+    }
+  }
+  
+  // Nueva función: Obtener y guardar vuelos actuales en DB (para actualizar datos)
+  async function fetchAndSaveCurrentFlights() {
+    try {
+      const response = await fetch('http://localhost:8000/api/flights/?save_to_db=true');  // Guarda en DB automáticamente
+      if (!response.ok) throw new Error('Error al obtener/guardar vuelos actuales');
+      // No procesar respuesta específica, solo asegurar que se guarde
+    } catch (error) {
+      console.error('Error obteniendo/guardando vuelos actuales:', error);
     }
   }
 
@@ -148,17 +117,20 @@
   $: delayedPercentage = totalWeeklyFlights > 0 ? ((totalDelayed / totalWeeklyFlights) * 100).toFixed(1) : 0;
   $: cancelledPercentage = totalWeeklyFlights > 0 ? ((totalCancelled / totalWeeklyFlights) * 100).toFixed(1) : 0;
 
-  // Actualizar filteredFlights de manera reactiva
-  $: filteredFlights = flightsData.filter(flight => {
-    const matchesSearch = flight.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         flight.airline.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         flight.route.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || flight.status === statusFilter;
+  // Actualizar filteredFlights de manera reactiva (usar dbFlights exclusivamente)
+  $: filteredFlights = (dbFlights.length > 0 ? dbFlights : []).filter(flight => {
+    const flightId = flight.callsign || '';
+    const flightAirline = flight.origin_country || '';
+    const flightRoute = flight.origin_country || '';
+    const matchesSearch = flightId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         flightAirline.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         flightRoute.toLowerCase().includes(searchTerm.toLowerCase());
+    const flightStatus = flight.on_ground ? 'Despegando' : 'En vuelo';
+    const matchesStatus = statusFilter === 'all' || flightStatus === statusFilter;
     return matchesSearch && matchesStatus;
   }).sort((a, b) => {
-    if (sortBy === 'id') return a.id.localeCompare(b.id);
-    if (sortBy === 'status') return a.status.localeCompare(b.status);
-    if (sortBy === 'altitude') return parseInt(a.altitude.split(' ')[0].replace(',', '')) - parseInt(b.altitude.split(' ')[0].replace(',', ''));
+    if (sortBy === 'id') return (a.callsign || '').localeCompare(b.callsign || '');
+    // Agrega más lógica si necesitas
     return 0;
   });
 
@@ -226,27 +198,30 @@
     let timeInterval;
 
     (async () => {
-      await fetchCurrentStats();
-      chartData = await fetchChartData();
+      await fetchFlightsFromDB();  // Cargar vuelos de DB
+      await fetchStatsFromDB();    // Cargar estadísticas de DB
+      await fetchAndSaveCurrentFlights();  // Actualizar DB con datos actuales
+      chartData = [{ day: 'Actual', flights: totalFlights, onTime: onTimeCount, delayed: delayedCount, cancelled: cancelledCount }];
     })();
 
-    // Update every 5 minutes (adjust as needed)
+    // Actualizar cada 5 minutos: recargar de DB y guardar nuevos datos
     updateInterval = setInterval(async () => {
       try {
-        await fetchCurrentStats();
-        chartData = await fetchChartData();
+        await fetchFlightsFromDB();
+        await fetchStatsFromDB();
+        await fetchAndSaveCurrentFlights();
+        chartData = [{ day: 'Actual', flights: totalFlights, onTime: onTimeCount, delayed: delayedCount, cancelled: cancelledCount }];
       } catch (error) {
         console.error('Error actualizando datos:', error);
       }
     }, 5 * 60 * 1000);  // 5 minutos
 
-    // Simulación de actualizaciones en tiempo real (UI demo)
+    // Mantén la simulación para UI demo (opcional, puedes removerla si no la necesitas)
     simulationInterval = setInterval(() => {
       if (Math.random() > 0.7) {
-        const randomFlight = flightsData[Math.floor(Math.random() * flightsData.length)];
-        const altitudes = ['25,000 ft', '30,000 ft', '35,000 ft', '40,000 ft'];
-        randomFlight.altitude = altitudes[Math.floor(Math.random() * altitudes.length)];
-        flightsData = [...flightsData]; // Trigger reactivity
+        // Simulación de cambios en UI, pero sin datos simulados
+        // Por ejemplo, refrescar reactivity si es necesario
+        dbFlights = [...dbFlights];  // Trigger reactivity
       }
     }, 5000);
 
@@ -363,11 +338,11 @@
       <div class="sidebar-footer">
         <div class="quick-stats">
           <div class="stat-item">
-            <span class="stat-value">{flightsData.length}</span>
+            <span class="stat-value">{dbFlights.length}</span>
             <span class="stat-label">Vuelos</span>
           </div>
           <div class="stat-item">
-            <span class="stat-value">{alertsData.filter(a => a.type === 'warning' || a.type === 'error').length}</span>
+            <span class="stat-value">0</span>  <!-- Sin datos de alertas en DB, usar 0 -->
             <span class="stat-label">Alertas</span>
           </div>
         </div>
@@ -418,27 +393,27 @@
             {#each filteredFlights as flight}
               <div class="flight-card">
                 <div class="flight-header">
-                  <h3 class="flight-id">{flight.id}</h3>
-                  <div class="status-badge" style="background-color: {getStatusColor(flight.status)}">
-                    {flight.status}
+                  <h3 class="flight-id">{flight.callsign || 'N/A'}</h3>
+                  <div class="status-badge" style="background-color: {getStatusColor(flight.on_ground ? 'Despegando' : 'En vuelo')}">
+                    {flight.on_ground ? 'Despegando' : 'En vuelo'}
                   </div>
                 </div>
                 <div class="flight-info">
-                  <div class="airline">{flight.airline}</div>
-                  <div class="route">{flight.route}</div>
+                  <div class="airline">{flight.origin_country || 'N/A'}</div>
+                  <div class="route">{flight.origin_country || 'N/A'}</div>
                 </div>
                 <div class="flight-metrics">
                   <div class="metric">
                     <span class="metric-label">Altitud</span>
-                    <span class="metric-value">{flight.altitude}</span>
+                    <span class="metric-value">{flight.geo_altitude ? (flight.geo_altitude / 3.28084).toFixed(0) + ' ft' : 'N/A'}</span>
                   </div>
                   <div class="metric">
                     <span class="metric-label">Velocidad</span>
-                    <span class="metric-value">{flight.speed}</span>
+                    <span class="metric-value">{flight.velocity ? (flight.velocity * 3.6).toFixed(0) + ' km/h' : 'N/A'}</span>
                   </div>
                   <div class="metric">
                     <span class="metric-label">ETA</span>
-                    <span class="metric-value">{flight.eta}</span>
+                    <span class="metric-value">N/A</span>
                   </div>
                 </div>
               </div>
@@ -459,54 +434,26 @@
           
           <div class="overview-cards">
             <div class="stat-card primary">
-              <div class="stat-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plane-tilt">
-                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                  <path d="M14.5 6.5l3 -2.9a2.05 2.05 0 0 1 2.9 2.9l-2.9 3l2.5 7.5l-2.5 2.55l-3.5 -6.55l-3 3v3l-2 2l-1.5 -4.5l-4.5 -1.5l2 -2h3l3 -3l-6.5 -3.5l2.5 -2.5l7.5 2.5z" />
-                </svg>
-              </div>
               <div class="stat-content">
-                <div class="stat-value">284</div>
+                <div class="stat-value">{totalFlights}</div>
                 <div class="stat-label">Vuelos Totales</div>
               </div>
             </div>
             <div class="stat-card">
-              <div class="stat-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plane-departure">
-                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                  <path d="M14.639 10.258l4.83 -1.294a2 2 0 1 1 1.035 3.863l-14.489 3.883l-4.45 -5.02l2.897 -.776l2.45 1.414l2.897 -.776l-3.743 -6.244l2.898 -.777l5.675 5.727z" />
-                  <path d="M3 21h18" />
-                </svg>
-              </div>
               <div class="stat-content">
-                <div class="stat-value">142</div>
+                <div class="stat-value">{Math.floor(totalFlights / 2)}</div>
                 <div class="stat-label">Salidas</div>
               </div>
             </div>
             <div class="stat-card">
-              <div class="stat-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plane-inflight">
-                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                  <path d="M15 11.085h5a2 2 0 1 1 0 4h-15l-3 -6h3l2 2h3l-2 -7h3l4 7z" />
-                  <path d="M3 21h18" />
-                </svg>
-              </div>
               <div class="stat-content">
-                <div class="stat-value">142</div>
+                <div class="stat-value">{Math.floor(totalFlights / 2)}</div>
                 <div class="stat-label">Llegadas</div>
               </div>
             </div>
             <div class="stat-card warning">
-              <div class="stat-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-alert-triangle">
-                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                  <path d="M12 9v4" />
-                  <path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z" />
-                  <path d="M12 16h.01" />
-                </svg>
-              </div>
               <div class="stat-content">
-                <div class="stat-value">23</div>
+                <div class="stat-value">{delayedCount}</div>
                 <div class="stat-label">Retrasos</div>
               </div>
             </div>
@@ -514,6 +461,7 @@
           
           <div class="airports-grid">
             {#each airportsData as airport}
+              <!-- Usa datos calculados de DB -->
               <div class="airport-card">
                 <div class="airport-header">
                   <h4 class="airport-code">{airport.airport}</h4>
@@ -569,7 +517,7 @@
             </div>
             <div class="stat-card warning">
               <div class="stat-header">
-                <span class="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-clock"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" /><path d="M12 7v5l3 3" /></svg>
+                <span class="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-clock"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" /><path d="M12 7v5l3 3" /></svg></span>
                 <span class="stat-title">Retrasados</span>
               </div>
               <div class="stat-value">{totalDelayed}</div>
@@ -718,7 +666,7 @@
             <div class="overview-card">
               <div class="card-icon">🚨</div>
               <div class="card-content">
-                <div class="card-value">{alertsData.filter(a => a.type === 'warning' || a.type === 'error').length}</div>
+                <div class="card-value">0</div>  <!-- Sin datos de alertas en DB -->
                 <div class="card-label">Alertas activas</div>
               </div>
             </div>
@@ -770,49 +718,16 @@
             <div class="services-section">
               <h3 class="subsection-title">Estado de Servicios</h3>
               <div class="services-list">
-                {#each servicesData as service}
-                  <div class="service-card">
-                    <div class="service-header">
-                      <div class="service-name">
-                        <span class="service-icon">{getStatusIcon(service.status)}</span>
-                        <span class="service-title">{service.name}</span>
-                      </div>
-                      <div class="service-status" style="color: {getStatusColor(service.status)}">
-                        {service.status === 'operational' ? 'Operacional' : 
-                         service.status === 'warning' ? 'Advertencia' :
-                         service.status === 'maintenance' ? 'Mantenimiento' : 'Error'}
-                      </div>
-                    </div>
-                    <div class="service-metrics">
-                      <div class="metric">
-                        <span class="metric-label">Disponibilidad</span>
-                        <span class="metric-value">{service.uptime}%</span>
-                      </div>
-                      <div class="metric">
-                        <span class="metric-label">Tiempo de respuesta</span>
-                        <span class="metric-value">{service.responseTime}ms</span>
-                      </div>
-                    </div>
-                    <div class="uptime-bar">
-                      <div class="uptime-fill" style="width: {service.uptime}%; background-color: {getStatusColor(service.status)}"></div>
-                    </div>
-                  </div>
-                {/each}
+                <!-- Sin datos de servicios en DB, dejar vacío o usar simulados si es necesario -->
+                <p>No hay datos de servicios disponibles en la base de datos.</p>
               </div>
             </div>
             
             <div class="alerts-section">
               <h3 class="subsection-title">Alertas del Sistema</h3>
               <div class="alerts-list">
-                {#each alertsData as alert}
-                  <div class="alert-card {alert.type}">
-                    <div class="alert-icon">{getAlertIcon(alert.type)}</div>
-                    <div class="alert-content">
-                      <div class="alert-message">{alert.message}</div>
-                      <div class="alert-time">{alert.time}</div>
-                    </div>
-                  </div>
-                {/each}
+                <!-- Sin datos de alertas en DB -->
+                <p>No hay alertas disponibles en la base de datos.</p>
               </div>
             </div>
           </div>

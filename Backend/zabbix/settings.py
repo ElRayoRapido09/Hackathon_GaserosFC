@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'corsheaders',  # Agregado para CORS
+    'rest_framework',
     'API.apps.ApiConfig',  # Agregado para la aplicación de vuelos
 ]
 
