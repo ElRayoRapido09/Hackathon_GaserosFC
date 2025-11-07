@@ -63,6 +63,9 @@
   let delayedCount = 0;
   let cancelledCount = 0;
 
+  // Declarar filteredFlights primero para evitar errores de referencia
+  let filteredFlights = [];
+
   async function fetchCurrentStats() {
     try {
       const response = await fetch('http://localhost:8000/api/flights/');
@@ -78,41 +81,42 @@
     }
   }
 
-  // Obtener datos históricos para el gráfico (3 días para reducir requests)
+  // Modificar fetchChartData para obtener datos actuales en lugar de históricos
   async function fetchChartData() {
-    const newChartData = [];
-    const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-    const now = new Date();
-    for (let i = 2; i >= 0; i--) {
-      const date = new Date(now);
-      date.setDate(now.getDate() - i);
-      const begin = Math.floor(date.setHours(0, 0, 0, 0) / 1000);
-      const end = begin + 24 * 60 * 60;
-      try {
-        const response = await fetch(`http://localhost:8000/api/flights/?begin=${begin}&end=${end}`);
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        const flights = await response.json() || [];
-        const total = flights.length;
-        const onTime = Math.floor(total * 0.88);
-        const delayed = Math.floor(total * 0.10);
-        const cancelled = total - onTime - delayed;
-        newChartData.push({
-          day: days[date.getDay()],
-          flights: total,
-          onTime,
-          delayed,
-          cancelled
-        });
-      } catch (error) {
-        console.error('Error obteniendo datos del gráfico para día', i, ':', error);
-        const existingDay = chartData.find(d => d.day === days[date.getDay()]);
-        newChartData.push(existingDay || { day: days[date.getDay()], flights: 0, onTime: 0, delayed: 0, cancelled: 0 });
-      }
+    try {
+      const response = await fetch('http://localhost:8000/api/flights/');
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      const flights = data.states || [];
+      const total = flights.length;
+      const onTime = Math.floor(total * 0.88);  // Estimación
+      const delayed = Math.floor(total * 0.10);
+      const cancelled = total - onTime - delayed;
+      
+      // Crear un "gráfico" simple con datos actuales (puedes expandirlo para múltiples puntos)
+      return [{
+        day: 'Actual',
+        flights: total,
+        onTime,
+        delayed,
+        cancelled
+      }];
+    } catch (error) {
+      console.error('Error obteniendo datos actuales:', error);
+      return [{ day: 'Actual', flights: 0, onTime: 0, delayed: 0, cancelled: 0 }];
     }
-    return newChartData;
   }
 
-  // Vuelos filtrados
+  // Variables para estadísticas calculadas de chartData
+  $: totalWeeklyFlights = chartData[0]?.flights || 0;  // Usar el primer elemento (datos actuales)
+  $: totalOnTime = chartData[0]?.onTime || 0;
+  $: totalDelayed = chartData[0]?.delayed || 0;
+  $: totalCancelled = chartData[0]?.cancelled || 0;
+  $: onTimePercentage = totalWeeklyFlights > 0 ? ((totalOnTime / totalWeeklyFlights) * 100).toFixed(1) : 0;
+  $: delayedPercentage = totalWeeklyFlights > 0 ? ((totalDelayed / totalWeeklyFlights) * 100).toFixed(1) : 0;
+  $: cancelledPercentage = totalWeeklyFlights > 0 ? ((totalCancelled / totalWeeklyFlights) * 100).toFixed(1) : 0;
+
+  // Actualizar filteredFlights de manera reactiva
   $: filteredFlights = flightsData.filter(flight => {
     const matchesSearch = flight.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          flight.airline.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -122,18 +126,19 @@
   }).sort((a, b) => {
     if (sortBy === 'id') return a.id.localeCompare(b.id);
     if (sortBy === 'status') return a.status.localeCompare(b.status);
-    if (sortBy === 'altitude') return parseInt(a.altitude) - parseInt(b.altitude);
+    if (sortBy === 'altitude') return parseInt(a.altitude.split(' ')[0].replace(',', '')) - parseInt(b.altitude.split(' ')[0].replace(',', ''));
     return 0;
   });
 
-  // Variables para estadísticas calculadas de chartData
-  $: totalWeeklyFlights = chartData.reduce((sum, day) => sum + day.flights, 0);
-  $: totalOnTime = chartData.reduce((sum, day) => sum + day.onTime, 0);
-  $: totalDelayed = chartData.reduce((sum, day) => sum + day.delayed, 0);
-  $: totalCancelled = chartData.reduce((sum, day) => sum + day.cancelled, 0);
-  $: onTimePercentage = totalWeeklyFlights > 0 ? ((totalOnTime / totalWeeklyFlights) * 100).toFixed(1) : 0;
-  $: delayedPercentage = totalWeeklyFlights > 0 ? ((totalDelayed / totalWeeklyFlights) * 100).toFixed(1) : 0;
-  $: cancelledPercentage = totalWeeklyFlights > 0 ? ((totalCancelled / totalWeeklyFlights) * 100).toFixed(1) : 0;
+  // Agregar definiciones de variables reactivas para métricas
+  $: averageVelocity = totalFlights > 0 ? (realFlights.reduce((sum, f) => sum + ((f.velocity || 0) * 3.6), 0) / totalFlights).toFixed(0) : 0;  // Convertir m/s a km/h
+  $: averageAltitude = totalFlights > 0 ? (realFlights.reduce((sum, f) => sum + (f.geo_altitude || 0), 0) / totalFlights).toFixed(0) : 0;  // Ya en metros
+
+  // Agregar definiciones de variables reactivas para métricas adicionales
+  $: ascendingFlights = realFlights.filter(f => f.vertical_rate > 0).length;
+  $: descendingFlights = realFlights.filter(f => f.vertical_rate < 0).length;
+  $: highSpeedFlights = realFlights.filter(f => f.velocity > 500).length;
+  $: lowAltitudeFlights = realFlights.filter(f => f.geo_altitude < 10000).length;
 
   // Utilidades
   function getStatusColor(status) {
@@ -194,7 +199,7 @@
       chartData = await fetchChartData();
     })();
 
-    // Update every 60 minutes (adjust as needed)
+    // Update every 5 minutes (adjust as needed)
     updateInterval = setInterval(async () => {
       try {
         await fetchCurrentStats();
@@ -202,7 +207,7 @@
       } catch (error) {
         console.error('Error actualizando datos:', error);
       }
-    }, 60 * 60 * 1000);
+    }, 5 * 60 * 1000);  // 5 minutos
 
     // Simulación de actualizaciones en tiempo real (UI demo)
     simulationInterval = setInterval(() => {
@@ -225,6 +230,51 @@
       clearInterval(timeInterval);
     };
   });
+
+  // Helpers para el pie (mover/usar desde <script>)
+  function polarToCartesian(cx, cy, r, angleDeg) {
+    const angleRad = (angleDeg - 90) * Math.PI / 180;
+    return {
+      x: +(cx + r * Math.cos(angleRad)).toFixed(3),
+      y: +(cy + r * Math.sin(angleRad)).toFixed(3)
+    };
+  }
+
+  function describeArc(cx, cy, r, startAngle, endAngle) {
+    // Normalizar y evitar path inválido cuando start == end
+    let startA = startAngle % 360; if (startA < 0) startA += 360;
+    let endA = endAngle % 360; if (endA < 0) endA += 360;
+    // si el ángulo es 0, crear un pequeño delta para que SVG lo dibuje
+    if (Math.abs(endAngle - startAngle) < 1e-6) endAngle = startAngle + 0.0001;
+    const startPt = polarToCartesian(cx, cy, r, startAngle);
+    const endPt = polarToCartesian(cx, cy, r, endAngle);
+    let delta = (endAngle - startAngle);
+    if (delta < 0) delta += 360;
+    const largeArcFlag = delta > 180 ? 1 : 0;
+    const sweepFlag = 1; // dibujar en sentido horario
+    return `M ${cx} ${cy} L ${startPt.x} ${startPt.y} A ${r} ${r} 0 ${largeArcFlag} ${sweepFlag} ${endPt.x} ${endPt.y} Z`;
+  }
+
+  // Calcular los slices del pie de forma reactiva en el script (más fiable)
+  $: pieData = (function() {
+    const d = chartData[0] || { flights: 0, onTime: 0, delayed: 0, cancelled: 0 };
+    const total = d.flights || 0;
+    const base = [
+      { key: 'onTime', label: 'A Tiempo', value: d.onTime || 0, color: '#22c55e' },
+      { key: 'delayed', label: 'Retrasados', value: d.delayed || 0, color: '#f59e0b' },
+      { key: 'cancelled', label: 'Cancelados', value: d.cancelled || 0, color: '#ef4444' }
+    ];
+    let start = 0;
+    return base.map(s => {
+      const angle = total > 0 ? (s.value / total) * 360 : 0;
+      const slice = { ...s, startAngle: start, endAngle: start + angle };
+      start += angle;
+      return slice;
+    }).filter(s => s.value > 0);
+  })();
+
+  // (opcional) depuración en consola para verificar valores reales
+  $: console.debug && console.debug('pieData', pieData, 'chartData[0]', chartData[0]);
 </script>
 
 <div class="app">
@@ -467,16 +517,16 @@
       {#if activeSection === 'stats'}
         <div class="section active">
           <div class="section-header">
-            <h2 class="section-title">Estadísticas de Vuelo</h2>
+            <h2 class="section-title">Estadísticas de Vuelo (Tiempo Real)</h2>
           </div>
           <div class="overview-stats">
             <div class="stat-card primary">
               <div class="stat-header">
                 <span class="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plane-tilt"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M14.5 6.5l3 -2.9a2.05 2.05 0 0 1 2.9 2.9l-2.9 3l2.5 7.5l-2.5 2.55l-3.5 -6.55l-3 3v3l-2 2l-1.5 -4.5l-4.5 -1.5l2 -2h3l3 -3l-6.5 -3.5l2.5 -2.5l7.5 2.5z" /></svg></span>
-                <span class="stat-title">Total de Vuelos</span>
+                <span class="stat-title">Total de Vuelos Activos</span>
               </div>
               <div class="stat-value">{totalWeeklyFlights}</div>
-              <div class="stat-change positive">+5.2% vs período anterior</div>
+              <div class="stat-change positive">Datos en tiempo real</div>
             </div>
             <div class="stat-card success">
               <div class="stat-header">
@@ -489,6 +539,7 @@
             <div class="stat-card warning">
               <div class="stat-header">
                 <span class="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-clock"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" /><path d="M12 7v5l3 3" /></svg>
+                <span class="stat-title">Retrasados</span>
               </div>
               <div class="stat-value">{totalDelayed}</div>
               <div class="stat-percentage">{delayedPercentage}%</div>
@@ -505,37 +556,106 @@
           
           <div class="charts-section">
             <div class="chart-container">
-              <h3 class="chart-title">Tendencia Semanal</h3>
-              <div class="bar-chart">
-                {#each chartData as day}
-                  <div class="bar-group">
-                    <div class="bars">
-                      <div class="bar total" style="height: {(day.flights / 250) * 100}%" title="Total: {day.flights}"></div>
-                      <div class="bar on-time" style="height: {(day.onTime / 250) * 100}%" title="A tiempo: {day.onTime}"></div>
-                      <div class="bar delayed" style="height: {(day.delayed / 250) * 100}%" title="Retrasados: {day.delayed}"></div>
-                    </div>
-                    <div class="bar-label">{day.day}</div>
+              <h3 class="chart-title">Estado Actual</h3>
+              <div class="pie-chart">
+                {#if pieData && pieData.length}
+                  <svg viewBox="0 0 200 200" class="pie-svg" aria-label="Estado actual de vuelos">
+                    <circle cx="100" cy="100" r="80" fill="#0b254a" opacity="0.05" />
+                    {#each pieData as slice}
+                      <path d={describeArc(100, 100, 80, slice.startAngle, slice.endAngle)} fill={slice.color} />
+                    {/each}
+                    <circle cx="100" cy="100" r="36" fill="#0b254a" />
+                    <text x="100" y="105" text-anchor="middle" fill="#ffffff" font-size="12">{chartData[0]?.flights || 0}</text>
+                    <text x="100" y="122" text-anchor="middle" fill="#9ca3af" font-size="10">vuelos</text>
+                  </svg>
+
+                  <div class="pie-legend">
+                    {#each pieData as s}
+                      <div class="legend-item">
+                        <div class="legend-color" style="background-color: {s.color}"></div>
+                        <span style="color: {s.color}">{s.label}: {s.value} ({(chartData[0]?.flights > 0 ? (s.value / chartData[0].flights * 100).toFixed(1) : 0)}%)</span>
+                      </div>
+                    {/each}
                   </div>
-                {/each}
+                {/if}
               </div>
             </div>
+
             <div class="performance-metrics">
               <h3 class="chart-title">Métricas de Rendimiento</h3>
-              <div class="metric-card">
-                <div class="metric-header">
-                  <span class="metric-label">Eficiencia General</span>
-                  <span class="metric-value">88.1%</span>
+              <div class="metrics-grid">
+                <div class="metric-item">
+                  <div class="metric-card">
+                    <div class="metric-header">
+                      <span class="metric-label">Velocidad Promedio</span>
+                      <span class="metric-value">{averageVelocity} km/h</span>
+                    </div>
+                    <div class="gauge-chart">
+                      <svg viewBox="0 0 100 60" class="gauge-svg">
+                        <path d="M10,50 A40,40 0 0,1 90,50" fill="none" stroke="#e5e7eb" stroke-width="8"/>
+                        <path d="M10,50 A40,40 0 0,1 {10 + 80 * (averageVelocity / 1000)} ,{50 - 40 * Math.sin(Math.PI * (averageVelocity / 1000))}" fill="none" stroke="#22c55e" stroke-width="8"/>
+                      </svg>
+                    </div>
+                  </div>
                 </div>
-                <div class="progress-bar">
-                  <div class="progress-fill" style="width: 88.1%; background-color: #f59e0b"></div>
+                <div class="metric-item">
+                  <div class="metric-card">
+                    <div class="metric-header">
+                      <span class="metric-label">Altitud Promedio</span>
+                      <span class="metric-value">{averageAltitude} m</span>
+                    </div>
+                    <div class="gauge-chart">
+                      <svg viewBox="0 0 100 60" class="gauge-svg">
+                        <path d="M10,50 A40,40 0 0,1 90,50" fill="none" stroke="#e5e7eb" stroke-width="8"/>
+                        <path d="M10,50 A40,40 0 0,1 {10 + 80 * (averageAltitude / 12000)} ,{50 - 40 * Math.sin(Math.PI * (averageAltitude / 12000))}" fill="none" stroke="#f59e0b" stroke-width="8"/>
+                      </svg>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div class="metric-card">
-                <div class="metric-header">
-                  <span class="metric-label">Retraso Promedio</span>
-                  <span class="metric-value">15 min</span>
+                <div class="metric-item">
+                  <div class="metric-card">
+                    <div class="metric-header">
+                      <span class="metric-label">Vuelos en Ascenso</span>
+                      <span class="metric-value">{ascendingFlights}</span>
+                    </div>
+                    <div class="bar-chart-small">
+                      <div class="bar-fill" style="width: {totalFlights > 0 ? (ascendingFlights / totalFlights) * 100 : 0}%; background-color: #3b82f6"></div>
+                    </div>
+                  </div>
                 </div>
-                <div class="delay-indicator good">Excelente</div>
+                <div class="metric-item">
+                  <div class="metric-card">
+                    <div class="metric-header">
+                      <span class="metric-label">Vuelos en Descenso</span>
+                      <span class="metric-value">{descendingFlights}</span>
+                    </div>
+                    <div class="bar-chart-small">
+                      <div class="bar-fill" style="width: {totalFlights > 0 ? (descendingFlights / totalFlights) * 100 : 0}%; background-color: #8b5cf6"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="metric-item">
+                  <div class="metric-card">
+                    <div class="metric-header">
+                      <span class="metric-label">Vuelos a Alta Velocidad</span>
+                      <span class="metric-value">{highSpeedFlights}</span>
+                    </div>
+                    <div class="bar-chart-small">
+                      <div class="bar-fill" style="width: {totalFlights > 0 ? (highSpeedFlights / totalFlights) * 100 : 0}%; background-color: #10b981"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="metric-item">
+                  <div class="metric-card">
+                    <div class="metric-header">
+                      <span class="metric-label">Vuelos a Baja Altitud</span>
+                      <span class="metric-value">{lowAltitudeFlights}</span>
+                    </div>
+                    <div class="bar-chart-small">
+                      <div class="bar-fill" style="width: {totalFlights > 0 ? (lowAltitudeFlights / totalFlights) * 100 : 0}%; background-color: #f59e0b"></div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
