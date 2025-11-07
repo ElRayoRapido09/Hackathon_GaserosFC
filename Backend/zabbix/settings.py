@@ -141,5 +141,8 @@ OPENSKY_PASSWORD = config('OPENSKY_PASSWORD')
 
 # Configuración CORS para permitir requests desde el frontend
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',  # Ajusta al puerto de tu frontend Svelte
+    "http://localhost:5173",  # Origen del frontend Svelte
 ]
+
+# Para desarrollo, puedes usar esto en lugar de la lista anterior (menos seguro, pero conveniente):
+# CORS_ALLOW_ALL_ORIGINS = True
